@@ -1,0 +1,29 @@
+{
+    "host": "127.0.0.1",
+    "port": 3001,
+    "telegram_bot_token": "TOKEN",
+    "telegram_chat_id": "CHATID",
+    "network_analysis_interval": 60,
+    "notifications": {
+        "container_stopped": {
+            "condition": false,
+            "percent": 0
+        },
+        "ram": {
+            "condition": false,
+            "percent": 2
+        },
+        "cpu": {
+            "condition": false,
+            "percent": 0
+        },
+        "storage": {
+            "condition": false,
+            "percent": 0
+        },
+        "dos": {
+            "condition": false,
+            "percent": 0
+        }
+    }
+}
