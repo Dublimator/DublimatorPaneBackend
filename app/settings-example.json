@@ -3,7 +3,8 @@
     "port": 3001,
     "telegram_bot_token": "TOKEN",
     "telegram_chat_id": "CHATID",
-    "network_analysis_interval": 60,
+    "network_analysis_interval": 10,
+    "threshold_request_per_second": 100,
     "notifications": {
         "container_stopped": {
             "condition": false,

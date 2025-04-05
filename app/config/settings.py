@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # Настройки для анализа сети
     network_analysis_interval: int = 60  # Интервал анализа сети в секундах
+    threshold_request_per_second: int = 100 # Количество запросов в секунду
 
     # Настройки уведомлений
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
@@ -84,6 +85,7 @@ async def load_settings_from_file():
                     settings.telegram_bot_token = loaded_settings.get("telegram_bot_token", "your-telegram-bot-token")
                     settings.telegram_chat_id = loaded_settings.get("telegram_chat_id", "your-chat-id")
                     settings.network_analysis_interval = loaded_settings.get("network_analysis_interval", 60)
+                    settings.threshold_request_per_second = loaded_settings.get("threshold_request_per_second", 100)
                     settings.notifications = NotificationSettings(**loaded_settings.get("notifications", {}))
                     print("Настройки загружены из файла.")
     except Exception as e:
