@@ -2,8 +2,11 @@ from pydantic_settings import BaseSettings
 from pydantic import BaseModel, Field
 import json
 import aiofiles
+import asyncio
 from pathlib import Path
-from typing import Optional
+
+from app.utils import logger
+
 
 class AlertSettings(BaseModel):
     """
@@ -11,13 +14,6 @@ class AlertSettings(BaseModel):
     """
     condition: bool = Field(default=False)  # Включено или выключено
     percent: int = Field(default=0)  # Пороговое значение (если применимо)
-
-
-# class ChatIDSettings(BaseModel):
-#     """
-#     Модель настроек чат id
-#     """
-#     id: int = Field(default=0)
 
 class NotificationSettings(BaseModel):
     """
@@ -65,9 +61,9 @@ async def save_settings_to_file():
         # Сохраняем словарь в JSON-файл
         async with aiofiles.open(SETTINGS_FILE, mode="w", encoding="utf-8") as file:
             await file.write(json.dumps(settings_dict, indent=4, ensure_ascii=False))
-        print("Настройки сохранены в файл.")
+        logger.info("Настройки сохранены в файл.")
     except Exception as e:
-        print(f"Ошибка при сохранении настроек: {e}")
+        logger.error(f"Ошибка при сохранении настроек: {e}")
 
 async def load_settings_from_file():
     """
@@ -79,6 +75,7 @@ async def load_settings_from_file():
                 content = await file.read()
                 if content:
                     loaded_settings = json.loads(content)
+
                     # Обновляем настройки из файла
                     settings.host = loaded_settings.get("host", "127.0.0.1")
                     settings.port = loaded_settings.get("port", 3001)
@@ -87,10 +84,11 @@ async def load_settings_from_file():
                     settings.network_analysis_interval = loaded_settings.get("network_analysis_interval", 60)
                     settings.threshold_request_per_second = loaded_settings.get("threshold_request_per_second", 100)
                     settings.notifications = NotificationSettings(**loaded_settings.get("notifications", {}))
-                    print("Настройки загружены из файла.")
+
+                    logger.info("Настройки загружены из файла.")
     except Exception as e:
-        print(f"Ошибка при загрузке настроек: {e}")
+        logger.error(f"Ошибка при загрузке настроек: {e}")
+
 
 # Загружаем настройки при старте
-import asyncio
 asyncio.run(load_settings_from_file())

@@ -6,10 +6,7 @@ import psutil
 from typing import List, Dict, Any
 from ..config.settings import settings
 from app.bot import notify_ram_usage, notify_cpu_usage, notify_storage_usage
-
-# Настройка логгера
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from ..utils import logger
 
 # Интервал анализа (в секундах)
 ANALYSIS_INTERVAL = 10

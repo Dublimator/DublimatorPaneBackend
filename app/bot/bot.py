@@ -2,11 +2,7 @@ from telegram import Bot, Update
 from telegram.error import TelegramError
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from ..config.settings import settings
-import logging
-
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from ..utils import logger
 
 # Инициализация бота
 bot = Bot(token=settings.telegram_bot_token)

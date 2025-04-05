@@ -6,12 +6,8 @@ from scapy.layers.inet import IP
 from typing import Dict, List, Optional
 from app.bot import notify_dos_attack
 from app.config import settings
+from app.utils import logger
 from app.utils.data_handler import save_dos_data
-
-
-# Настройка логгера
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Настройки для обнаружения DOS-атак
 THRESHOLD_REQUESTS_PER_SECOND = settings.threshold_request_per_second  # Пороговое значение запросов в секунду
