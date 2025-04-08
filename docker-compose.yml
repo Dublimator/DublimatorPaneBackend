@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+    # network_mode: host  # Используем сетевой режим host
+    cap_add:
+      - NET_ADMIN  # Добавляем привилегии для работы с сетью
+      - NET_RAW    # Добавляем привилегии для работы с сырыми сокетами
+    privileged: true  # Даём контейнеру расширенные привилегии
