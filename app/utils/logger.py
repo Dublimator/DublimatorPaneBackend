@@ -38,7 +38,7 @@ class AppLogger:
 
         # Файловый обработчик (10 MB, 5 файлов ротации)
         file_handler = RotatingFileHandler(
-            "logs/app.log",
+            "../logs/app.log",
             maxBytes=10 * 1024 * 1024,
             backupCount=5,
             encoding="utf-8"
