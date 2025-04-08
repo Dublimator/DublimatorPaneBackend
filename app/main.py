@@ -60,12 +60,10 @@ async def run_background_tasks():
 
         # Запуск бота
         bot_task = asyncio.create_task(start_bot())
-        logger.info("Бот запущен")
 
         # Запуск анализа сети и сбора метрик параллельно
         network_task = asyncio.create_task(analyze_network())
         metrics_task = asyncio.create_task(analyze_metrics())
-        logger.info("Сервисы мониторинга запущены")
 
         await asyncio.gather(bot_task, network_task, metrics_task)
     except Exception as e:
