@@ -2,9 +2,13 @@
     "host": "127.0.0.1",
     "port": 3001,
     "telegram_bot_token": "TOKEN",
-    "telegram_chat_id": "CHATID",
-    "network_analysis_interval": 10,
-    "threshold_request_per_second": 100,
+    "telegram_chat_id": "CHAT_ID",
+    "threshold_syn": 50,
+    "threshold_http": 100,
+    "threshold_udp": 200,
+    "attack_expiry_time": 5,
+    "interface": "eth0",
+    "whitelist_ip": ["1.1.1.1", "8.8.8.8", "192.168.0.0/16"],
     "notifications": {
         "container_stopped": {
             "condition": false,
@@ -12,7 +16,7 @@
         },
         "ram": {
             "condition": false,
-            "percent": 2
+            "percent": 0
         },
         "cpu": {
             "condition": false,

@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from pydantic_settings import BaseSettings
 from pydantic import BaseModel, Field
 import json
@@ -36,8 +38,12 @@ class Settings(BaseSettings):
     telegram_chat_id: str = Field(default="your-chat-id", description="ID чата для уведомлений")
 
     # Настройки для анализа сети
-    network_analysis_interval: int = 60  # Интервал анализа сети в секундах
-    threshold_request_per_second: int = 100 # Количество запросов в секунду
+    threshold_syn: int = 100 # SYN-пакетов в секунду с одного IP = атака
+    threshold_http: int = 200 # HTTP-запросов в секунду с одного IP = атака
+    threshold_udp: int = 400 # UDP-запросов в секунду с одного IP = атака
+    attack_expiry_time: int = 10 # Время с последнего пакета когда атака считается завершенной
+    interface: str = "eth0" # Сетевой интерфейс
+    whitelist_ip: list[str] = Field(default_factory=lambda: ["1.1.1.1", "8.8.8.8", "10.0.0.0/8"])  # Белый список IP
 
     # Настройки уведомлений
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
@@ -67,25 +73,24 @@ async def save_settings_to_file():
 
 async def load_settings_from_file():
     """
-    Загружает настройки из JSON-файла.
+    Загружает настройки из JSON-файла и обновляет глобальный объект settings.
     """
+    global settings  # Объявляем, что будем изменять глобальный объект settings
     try:
         if SETTINGS_FILE.exists():
             async with aiofiles.open(SETTINGS_FILE, mode="r", encoding="utf-8") as file:
                 content = await file.read()
                 if content:
+                    # Загружаем JSON из файла
                     loaded_settings = json.loads(content)
 
-                    # Обновляем настройки из файла
-                    settings.host = loaded_settings.get("host", "127.0.0.1")
-                    settings.port = loaded_settings.get("port", 3001)
-                    settings.telegram_bot_token = loaded_settings.get("telegram_bot_token", "your-telegram-bot-token")
-                    settings.telegram_chat_id = loaded_settings.get("telegram_chat_id", "your-chat-id")
-                    settings.network_analysis_interval = loaded_settings.get("network_analysis_interval", 60)
-                    settings.threshold_request_per_second = loaded_settings.get("threshold_request_per_second", 100)
-                    settings.notifications = NotificationSettings(**loaded_settings.get("notifications", {}))
-
-                    logger.info("Настройки загружены из файла.")
+                    # Создаём новый экземпляр Settings из загруженных данных
+                    settings = Settings(**loaded_settings)
+                    logger.info("Настройки успешно загружены из файла.")
+        else:
+            logger.info(f"Файл настроек {SETTINGS_FILE} не найден. Используются настройки по умолчанию.")
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка при разборе JSON в файле настроек: {e}")
     except Exception as e:
         logger.error(f"Ошибка при загрузке настроек: {e}")
 
