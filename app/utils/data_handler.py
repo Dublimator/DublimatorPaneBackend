@@ -4,10 +4,10 @@ import aiofiles
 from typing import List, Dict, Optional
 from pathlib import Path
 
-from app.utils import logger
+from app.utils.logger import logger
 
 # Путь к файлу data.json
-DATA_FILE = Path("data.json")
+DATA_FILE = Path("../logs/data.json")
 
 async def save_dos_data(incident: Dict[str, str]) -> None:
     """
