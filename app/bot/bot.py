@@ -1,21 +1,78 @@
+import asyncio
 from datetime import datetime
 
-from telegram import Bot, Update
+from telegram import Bot, Update, BotCommand
 from telegram.error import TelegramError
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from ..config.settings import settings
-from ..utils import logger
+from ..utils import logger, load_dos_data
 
 # Инициализация бота
 bot = Bot(token=settings.telegram_bot_token)
 
-# Функция для обработки команды /getChatId
+TELEGRAM_MESSAGE_LIMIT = 4096
+
+# Функция для обработки команды /get_chat_id
 async def get_chat_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Отправляет пользователю его chat_id.
     """
     chat_id = update.message.chat_id
     await update.message.reply_text(f"Ваш chat_id: {chat_id}")
+
+async def get_dos_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Отправляет пользователю информацию о DOS-атаках, если он авторизован.
+    """
+    user_chat_id = update.message.chat_id
+    if user_chat_id != int(settings.telegram_chat_id):
+        await update.message.reply_text("Невозможно отправить данные в этом канале")
+        return
+
+    dos_data = await load_dos_data()
+    if not dos_data:
+        await update.message.reply_text("Нет данных")
+        return
+
+    # Формируем список частей сообщения для каждого инцидента
+    incidents = []
+    for incident in dos_data:
+        try:
+            time_start_value = incident["timeStart"]
+            if isinstance(time_start_value, str):
+                time_start_value = float(time_start_value)
+            time_start = datetime.fromtimestamp(time_start_value).strftime("%d.%m.%Y %H:%M:%S")
+        except (ValueError, TypeError) as e:
+            time_start = "Некорректное время"
+            logger.error(f"Ошибка при преобразовании времени: {e}, incident: {incident}")
+
+        incident_text = (
+            f"------------------------\n"
+            f"Тип атаки: {incident['type']}\n"
+            f"IP-адрес: {incident['source_ip']}\n"
+            f"Количество пакетов: {incident['count']}\n"
+            f"Время начала: {time_start}\n"
+            f"Статус: {'Активен' if incident['status'] else 'Завершён'}\n"
+            f"------------------------"
+        )
+        incidents.append(incident_text)
+
+    full_message = "Информация об атаках\n" + "\n".join(incidents)
+
+    # Если сообщение короткое, отправляем его целиком
+    if len(full_message) <= TELEGRAM_MESSAGE_LIMIT:
+        await update.message.reply_text(full_message)
+        return
+
+    # Если сообщение длинное, разбиваем его на части
+    current_part = "Информация об атаках\n"
+    for incident_text in incidents:
+        # Проверяем, влезет ли текущий инцидент в текущую часть
+        if len(current_part) + len(incident_text) + 1 <= TELEGRAM_MESSAGE_LIMIT:
+            current_part += "\n" + incident_text
+        else:
+            await update.message.reply_text(current_part)
+            break
 
 async def send_alert(message: str) -> None:
     """
@@ -90,18 +147,38 @@ async def notify_test_message() -> None:
     message = "Тестовое сообщение"
     await send_alert(message)
 
+async def set_bot_commands() -> None:
+    """
+    Устанавливает список команд для бота.
+    """
+    commands = [
+        BotCommand("get_chat_id", "Получить ваш chat_id"),
+        BotCommand("get_dos_data", "Получить информацию о дос атаках"),
+    ]
+    await bot.set_my_commands(commands)
+
 async def start_bot() -> None:
     """
     Запускает телеграм-бота.
     """
     try:
-        # Создаем приложение для бота
         application = ApplicationBuilder().token(settings.telegram_bot_token).build()
 
-        # Регистрируем обработчик команды /getChatId
-        application.add_handler(CommandHandler("getChatId", get_chat_id))
+        application.add_handler(CommandHandler("get_chat_id", get_chat_id))
+        application.add_handler(CommandHandler("get_dos_data", get_dos_data))
 
-        # Запускаем бота
-        logger.info("Бот запущен")
+        await set_bot_commands()
+
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            await application.initialize()
+            await application.start()
+            logger.info("Бот запущен в существующем цикле событий")
+            await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        else:
+            logger.info("Бот запущен в новом цикле событий")
+            await application.run_polling(allowed_updates=Update.ALL_TYPES)
+
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
+        raise
