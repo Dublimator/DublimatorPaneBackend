@@ -2,14 +2,18 @@ version: '3.8'
 
 services:
   app:
+    container_name: dublimator-pane-backend
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
+      - /proc:/host/proc:ro  # Для CPU и памяти
+      - /sys:/host/sys:ro    # Для системной информации
+      - /:/host:ro           # Для диска хоста
       - ./logs:/app/logs
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "8000:3001"  # Порт 3001 внутри контейнера (по вашим логам), проброшен на 8000 хоста
+      - "3001:3001"
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app

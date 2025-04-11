@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import datetime, timedelta
 import logging
 import docker
@@ -127,7 +128,8 @@ async def get_system_metrics() -> Dict[str, Any]:
         memory_total = memory.total / (1024 * 1024)  # Преобразуем байты в мегабайты
 
         # Диск
-        disk = psutil.disk_usage("/")
+        disk_path = "/host" if os.path.exists("/host") else "/"
+        disk = psutil.disk_usage(disk_path)
         disk_usage = disk.used / (1024 * 1024)  # Преобразуем байты в мегабайты
         disk_total = disk.total / (1024 * 1024)  # Преобразуем байты в мегабайты
 
