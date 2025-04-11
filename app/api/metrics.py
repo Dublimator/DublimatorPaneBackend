@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from app.services.metrics_collector import get_container_metrics  # Импортируем сервис для сбора метрик
-
+from app.services.metrics_collector import get_latest_docker_metrics
+from app.utils import logger
 
 router = APIRouter()
 
@@ -8,8 +8,7 @@ router = APIRouter()
 @router.get("/docker")
 async def get_docker_metrics():
     try:
-        # Получаем метрики контейнеров
-        metrics = await get_container_metrics()
+        metrics = await get_latest_docker_metrics()
         return metrics
     except Exception as e:
         # В случае ошибки возвращаем HTTP 500
