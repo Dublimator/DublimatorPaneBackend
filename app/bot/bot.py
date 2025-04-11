@@ -49,7 +49,7 @@ async def get_dos_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         incident_text = (
             f"------------------------\n"
             f"Тип атаки: {incident['type']}\n"
-            f"IP-адрес: {incident['source_ip']}\n"
+            f"IP-адрес: {incident['sourceIp']}\n"
             f"Количество пакетов: {incident['count']}\n"
             f"Время начала: {time_start}\n"
             f"Статус: {'Активен' if incident['status'] else 'Завершён'}\n"
@@ -80,7 +80,6 @@ async def send_alert(message: str) -> None:
     """
     try:
         await bot.send_message(chat_id=settings.telegram_chat_id, text=message)
-        logger.info(f"Уведомление отправлено: {message}")
     except TelegramError as e:
         logger.error(f"Ошибка при отправке уведомления: {e}")
 
@@ -178,7 +177,7 @@ async def start_bot() -> None:
         else:
             logger.info("Бот запущен в новом цикле событий")
             await application.run_polling(allowed_updates=Update.ALL_TYPES)
-
+        await bot.send_message(settings.telegram_chat_id, "Мониторинг активен")
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
         raise

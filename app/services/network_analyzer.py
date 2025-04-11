@@ -89,30 +89,41 @@ def analyze_packet(packet):
 
     # Игнорируем белый список
     if is_whitelisted(src_ip):
+        logger.debug(f"IP {src_ip} в белом списке, пропускаем")
         return
 
-    # Детектор SYN-флуда
-    if packet.haslayer(TCP) and packet[TCP].flags == "S":
-        syn_count[src_ip] += 1
-        if syn_count[src_ip] > THRESHOLD_SYN:
-            update_or_create_incident(src_ip, "SYN Flood", syn_count[src_ip])
-
     # Детектор HTTP-флуда
-    elif packet.haslayer(TCP) and packet.haslayer(Raw):
-        raw = packet[Raw].load.decode(errors="ignore")
-        if "GET" in raw or "POST" in raw:
+    if packet.haslayer(TCP) and packet[TCP].dport in (80, 8080):
+        if packet.haslayer(Raw):
+            raw = packet[Raw].load.decode(errors="ignore")
+            if "GET" in raw or "POST" in raw:
+                http_count[src_ip] += 1
+                if http_count[src_ip] > THRESHOLD_HTTP:
+                    update_or_create_incident(src_ip, "HTTP Flood", http_count[src_ip])
+                    http_count[src_ip] = 0
+                    return
+        elif packet[TCP].flags == "S":
             http_count[src_ip] += 1
             if http_count[src_ip] > THRESHOLD_HTTP:
                 update_or_create_incident(src_ip, "HTTP Flood", http_count[src_ip])
+                http_count[src_ip] = 0
+                return
+
+    # Детектор SYN-флуда
+    elif packet.haslayer(TCP) and packet[TCP].flags == "S":
+        syn_count[src_ip] += 1
+        if syn_count[src_ip] > THRESHOLD_SYN:
+            update_or_create_incident(src_ip, "SYN Flood", syn_count[src_ip])
+            syn_count[src_ip] = 0
+            return
 
     # Детектор UDP-флуда
     elif packet.haslayer(UDP):
         udp_count[src_ip] += 1
         if udp_count[src_ip] > THRESHOLD_UDP:
             update_or_create_incident(src_ip, "UDP Flood", udp_count[src_ip])
-
-    # Сбрасываем счётчики по таймеру
-    reset_counters()
+            udp_count[src_ip] = 0
+            return
 
 async def analyze_traffic():
     current_time = time.time()
@@ -160,6 +171,7 @@ async def analyze_traffic():
     # Отправляем уведомления после обработки всех инцидентов
     if temp_incidents:
         try:
+            logger.info(temp_incidents)
             await notify_dos_attack(temp_incidents)
         except Exception as e:
             logger.error(f"Ошибка при отправке уведомления: {e}")

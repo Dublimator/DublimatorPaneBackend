@@ -3,6 +3,7 @@ version: '3.8'
 services:
   app:
     container_name: dublimator-pane-backend
+    # network_mode: host
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,7 +14,10 @@ services:
       - ./logs:/app/logs
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "3001:3001"
+      - "3001:3001/tcp"
+      - "3001:3001/udp"
+      - "80:80/tcp"
+      - "80:80/udp"
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
