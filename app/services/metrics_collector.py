@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import docker
 import psutil
@@ -13,6 +13,22 @@ ANALYSIS_INTERVAL = 10
 
 # Создаем клиент Docker
 client = docker.from_env()
+
+def format_uptime(seconds: float) -> str:
+    """Форматирует аптайм в стиль 'Up X hours' или 'Up X minutes'."""
+    if seconds is None:
+        return "N/A"
+    delta = timedelta(seconds=int(seconds))
+    if delta.days > 0:
+        return f"Up {delta.days} days"
+    hours = delta.seconds // 3600
+    if hours > 0:
+        return f"Up {hours} hours"
+    minutes = (delta.seconds % 3600) // 60
+    if minutes > 0:
+        return f"Up {minutes} minutes"
+    return f"Up {delta.seconds} seconds"
+
 
 async def get_container_metrics() -> List[Dict[str, Any]]:
     """
@@ -30,10 +46,23 @@ async def get_container_metrics() -> List[Dict[str, Any]]:
             stats = container.stats(stream=False)
 
             # Извлекаем нужные метрики
+            container_info = container.attrs
             container_id = container.id
             container_name = container.name
             container_state = container.status
-            uptime = "N/A"  # Время работы контейнера (можно вычислить, если нужно)
+            state = container_info.get("State", {})
+            status = state.get("Status", "").capitalize()
+
+            # Получаем информацию о контейнере для вычисления аптайма
+            uptime = None
+            if status.lower() == "running":
+                started_at = state.get("StartedAt")
+                if started_at:
+                    try:
+                        start_time = datetime.strptime(started_at[:19], "%Y-%m-%dT%H:%M:%S")
+                        uptime = (datetime.utcnow() - start_time).total_seconds()
+                    except ValueError as e:
+                        logger.error(f"Ошибка при парсинге времени запуска для контейнера {container_name}: {e}")
 
             # CPU
             cpu_stats = stats.get("cpu_stats", {})
@@ -65,7 +94,7 @@ async def get_container_metrics() -> List[Dict[str, Any]]:
                 "id": container_id,
                 "name": container_name,
                 "state": container_state,
-                "uptime": uptime,
+                "uptime": format_uptime(uptime),
                 "cpuPercent": cpu_percent,
                 "memory": {
                     "usage": round(memory_usage, 2),
