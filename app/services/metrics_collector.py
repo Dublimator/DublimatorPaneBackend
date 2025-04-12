@@ -5,8 +5,9 @@ import logging
 import docker
 import psutil
 from typing import List, Dict, Any
+
 from ..config.settings import settings
-from app.bot import notify_ram_usage, notify_cpu_usage, notify_storage_usage
+from app.bot import notify_ram_usage, notify_cpu_usage, notify_storage_usage, notify_container_stopped
 from ..utils import logger
 
 # Интервал анализа (в секундах)
@@ -15,13 +16,12 @@ ANALYSIS_INTERVAL = 10
 # Создаем клиент Docker
 client = docker.from_env()
 
-# Создаем очереди для метрик с ограничением размера
-system_metrics_queue = asyncio.Queue(maxsize=1)
-docker_metrics_queue = asyncio.Queue(maxsize=1)
-
-# Переменные для хранения последних метрик
+# Глобальные переменные для хранения актуальных метрик
 latest_system_metrics: Dict[str, Any] = {}
 latest_docker_metrics: List[Dict[str, Any]] = []
+
+# Список для отслеживания остановленных контейнеров
+stopped_notify: List[str] = []
 
 def format_uptime(seconds: float) -> str:
     """Форматирует аптайм в стиль 'Up X hours' или 'Up X minutes'."""
@@ -45,9 +45,8 @@ async def get_container_metrics() -> List[Dict[str, Any]]:
     """
     containers_metrics = []
     try:
-        containers = client.containers.list()
+        containers = client.containers.list(all=True)
         for container in containers:
-            stats = container.stats(stream=False)
             container_info = container.attrs
             container_id = container.id
             container_name = container.name
@@ -65,15 +64,21 @@ async def get_container_metrics() -> List[Dict[str, Any]]:
                     except ValueError as e:
                         logger.error(f"Ошибка при парсинге времени запуска для контейнера {container_name}: {e}")
 
-            cpu_stats = stats.get("cpu_stats", {})
-            cpu_usage = cpu_stats.get("cpu_usage", {})
-            cpu_percent = round(cpu_usage.get("total_usage", 0) / 10 ** 9, 2)
+            if container_state == "running":
+                stats = container.stats(stream=False)
+                cpu_stats = stats.get("cpu_stats", {})
+                cpu_usage = cpu_stats.get("cpu_usage", {})
+                cpu_percent = round(cpu_usage.get("total_usage", 0) / 10 ** 9, 2)
+                memory_stats = stats.get("memory_stats", {})
+                memory_usage = memory_stats.get("usage", 0) / (1024 * 1024)
+                memory_limit = memory_stats.get("limit", 0) / (1024 * 1024)
+                network_stats = stats.get("networks", {})
+            else:
+                cpu_percent = 0.0
+                memory_usage = 0.0
+                memory_limit = 0.0
+                network_stats = {}
 
-            memory_stats = stats.get("memory_stats", {})
-            memory_usage = memory_stats.get("usage", 0) / (1024 * 1024)
-            memory_limit = memory_stats.get("limit", 0) / (1024 * 1024)
-
-            network_stats = stats.get("networks", {})
             network_metrics = {}
             for interface, metrics in network_stats.items():
                 network_metrics[interface] = {
@@ -111,7 +116,7 @@ async def get_system_metrics() -> Dict[str, Any]:
     """
     sys_metrics = {}
     try:
-        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_percent = psutil.cpu_percent(interval=0.1)
         memory = psutil.virtual_memory()
         memory_usage = memory.used / (1024 * 1024)
         memory_total = memory.total / (1024 * 1024)
@@ -139,9 +144,9 @@ async def get_system_metrics() -> Dict[str, Any]:
 
 async def analyze_metrics() -> None:
     """
-    Запускает анализ метрик и отправляет их в очереди.
+    Запускает анализ метрик и обновляет глобальные переменные.
     """
-    global latest_system_metrics, latest_docker_metrics
+    global latest_system_metrics, latest_docker_metrics, stopped_notify
     logger.info("Анализ метрик запущен")
     while True:
         try:
@@ -149,22 +154,9 @@ async def analyze_metrics() -> None:
             docker_metrics = await get_container_metrics()
             system_metrics = await get_system_metrics()
 
-            # Обновляем последние метрики
+            # Обновляем глобальные переменные
             latest_docker_metrics = docker_metrics
             latest_system_metrics = system_metrics
-
-            # Помещаем метрики в очереди, очищая старые данные
-            try:
-                await docker_metrics_queue.put(docker_metrics)
-            except asyncio.QueueFull:
-                await docker_metrics_queue.get()  # Удаляем старые данные
-                await docker_metrics_queue.put(docker_metrics)
-
-            try:
-                await system_metrics_queue.put(system_metrics)
-            except asyncio.QueueFull:
-                await system_metrics_queue.get()
-                await system_metrics_queue.put(system_metrics)
 
             # Проверяем пороговые значения и отправляем уведомления
             cpu_percent = system_metrics.get("cpuPercent", 0)
@@ -180,6 +172,15 @@ async def analyze_metrics() -> None:
             if disk_usage / disk_total * 100 >= settings.notifications.storage.percent:
                 await notify_storage_usage(disk_usage / disk_total * 100)
 
+            # Проверяем остановленные контейнеры
+            if settings.notifications.container_stopped:
+                for container in docker_metrics:
+                    if container["state"] == "exited" and container["id"] not in stopped_notify:
+                        await notify_container_stopped(container["name"])
+                        stopped_notify.append(container["id"])
+                    elif container["state"] == "running" and container["id"] in stopped_notify:
+                        stopped_notify.remove(container["id"])
+
         except Exception as e:
             logger.error(f"Ошибка в analyze_metrics: {e}")
         await asyncio.sleep(ANALYSIS_INTERVAL)
@@ -188,37 +189,16 @@ def start_metrics_collection():
     """Запускает сбор метрик в фоновом режиме."""
     asyncio.create_task(analyze_metrics())
 
-async def get_latest_docker_metrics() -> List[Dict[str, Any]]:
+def get_latest_docker_metrics_sync() -> List[Dict[str, Any]]:
     """
-    Возвращает последние метрики Docker.
+    Синхронно возвращает последние метрики Docker для использования в других модулях.
     """
     global latest_docker_metrics
-    try:
-        # Если есть данные в переменной, возвращаем их
-        if latest_docker_metrics:
-            return latest_docker_metrics
-        # Проверяем очередь
-        if not docker_metrics_queue.empty():
-            latest_docker_metrics = await docker_metrics_queue.get()
-            return latest_docker_metrics
-        # Если данных нет, возвращаем пустой список
-        return []
-    except Exception as e:
-        logger.error(f"Ошибка при получении Docker метрик: {e}")
-        return []
+    return latest_docker_metrics
 
-async def get_latest_system_metrics() -> Dict[str, Any]:
+def get_latest_system_metrics_sync() -> Dict[str, Any]:
     """
-    Возвращает последние системные метрики.
+    Синхронно возвращает последние системные метрики для использования в других модулях.
     """
     global latest_system_metrics
-    try:
-        if latest_system_metrics:
-            return latest_system_metrics
-        if not system_metrics_queue.empty():
-            latest_system_metrics = await system_metrics_queue.get()
-            return latest_system_metrics
-        return {}
-    except Exception as e:
-        logger.error(f"Ошибка при получении системных метрик: {e}")
-        return {}
+    return latest_system_metrics

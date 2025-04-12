@@ -1,6 +1,6 @@
 # app/api/server.py
 from fastapi import APIRouter, HTTPException
-from app.services.metrics_collector import get_latest_system_metrics  # Импортируем сервис для сбора метрик
+from app.services.metrics_collector import get_latest_system_metrics_sync  # Импортируем сервис для сбора метрик
 from app.utils import logger
 
 # Создаем роутер
@@ -10,7 +10,7 @@ router = APIRouter()
 @router.get("/metrics")
 async def get_server_metrics():
     try:
-        metrics = await get_latest_system_metrics()
+        metrics = get_latest_system_metrics_sync()
         return metrics
     except Exception as e:
         # В случае ошибки возвращаем HTTP 500
